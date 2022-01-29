@@ -1,28 +1,25 @@
 package main
 
 import (
+	"AzureSecuredAPIWithOT/helpers/pages"
 	"AzureSecuredAPIWithOT/logger"
 	"encoding/json"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/microsoft"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 var (
 	oauthConfMs = &oauth2.Config{
-		ClientID:     "",
-		ClientSecret: "",
-		Scopes:       []string{"api://bfee93bf-32a7-4793-bfe0-7e052aa5d85c/access_as_user"},
+		Scopes: []string{"api://bfee93bf-32a7-4793-bfe0-7e052aa5d85c/access_as_user"},
 	}
 	oauthStateStringMs = ""
 )
 
-/*
-InitializeOAuthMicrosoft Function
-*/
 func InitializeOAuthMicrosoft() {
 	oauthConfMs.ClientID = viper.GetString("microsoft.clientID")
 	oauthConfMs.ClientSecret = viper.GetString("microsoft.clientSecret")
@@ -30,21 +27,33 @@ func InitializeOAuthMicrosoft() {
 	oauthStateStringMs = viper.GetString("oauthStateString")
 }
 
-/*
-HandleMicrosoftLogin Function
-*/
 func HandleMicrosoftLogin(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(r.Host, "azure") {
 		oauthConfMs.RedirectURL = "https://" + r.Host + "/callback-ms"
 	} else {
 		oauthConfMs.RedirectURL = "http://" + r.Host + "/callback-ms"
 	}
-	HandleLogin(w, r, oauthConfMs, oauthStateStringMs)
+	handleLogin(w, r, oauthConfMs, oauthStateStringMs)
 }
 
-/*
-CallBackFromMicrosoft Function
-*/
+func handleLogin(w http.ResponseWriter, r *http.Request, oauthConf *oauth2.Config, oauthStateString string) {
+	URL, err := url.Parse(oauthConf.Endpoint.AuthURL)
+	if err != nil {
+		logger.Log.Error("Parse: " + err.Error())
+	}
+	logger.Log.Info(URL.String())
+	parameters := url.Values{}
+	parameters.Add("client_id", oauthConf.ClientID)
+	parameters.Add("scope", strings.Join(oauthConf.Scopes, " "))
+	parameters.Add("redirect_uri", oauthConf.RedirectURL)
+	parameters.Add("response_type", "code")
+	parameters.Add("state", oauthStateString)
+	URL.RawQuery = parameters.Encode()
+	url := URL.String()
+	logger.Log.Info(url)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
 func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Info("Callback-ms..")
 
@@ -86,15 +95,32 @@ func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: false,
 		})
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(token)
+		tokenjson, err := json.Marshal(token)
+		if err != nil {
+			logger.Log.Error("Error in Marshalling the token")
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(pages.CallBackHeaderPage))
+		w.Write(tokenjson)
+		w.Write([]byte(pages.CallBackFooterPage))
 
 	}
 
 }
 
 func ProtectedRoute(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(pages.SecureArea))
+}
 
-	w.Write([]byte("Hello, I'm protected\n"))
+func LogoutRoute(writer http.ResponseWriter, request *http.Request) {
+	cookie := &http.Cookie{
+		Name:   "access_token",
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	}
+	http.SetCookie(writer, cookie)
+	http.Redirect(writer, request, "/", http.StatusTemporaryRedirect)
 }
