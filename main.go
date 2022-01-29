@@ -4,6 +4,7 @@ import (
 	"AzureSecuredAPIWithOT/configs"
 	"AzureSecuredAPIWithOT/helpers/pages"
 	"AzureSecuredAPIWithOT/logger"
+	"crypto/rsa"
 	"fmt"
 	"github.com/golang-jwt/jwt"
 	"github.com/lestrrat-go/jwx/jwa"
@@ -80,8 +81,9 @@ func verifyToken(r *http.Request) (*jwt.Token, error) {
 		if !ok {
 			return nil, fmt.Errorf("key %v not found", kid)
 		}
-		var publickey interface{}
-		err = keys.Raw(&publickey)
+		
+		publickey := &rsa.PublicKey{}
+		err = keys.Raw(publickey)
 		if err != nil {
 			return nil, fmt.Errorf("could not parse pubkey")
 		}
