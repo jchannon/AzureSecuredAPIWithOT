@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/microsoft"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -16,8 +15,7 @@ var (
 	oauthConfMs = &oauth2.Config{
 		ClientID:     "",
 		ClientSecret: "",
-		RedirectURL:  "http://localhost:3000/callback-ms",
-		Scopes:       []string{"User.Read"},
+		Scopes:       []string{"api://bfee93bf-32a7-4793-bfe0-7e052aa5d85c/access_as_user"},
 	}
 	oauthStateStringMs = ""
 )
@@ -36,6 +34,11 @@ func InitializeOAuthMicrosoft() {
 HandleMicrosoftLogin Function
 */
 func HandleMicrosoftLogin(w http.ResponseWriter, r *http.Request) {
+	if strings.Contains(r.Host, "azure") {
+		oauthConfMs.RedirectURL = "https://" + r.Host + "/callback-ms"
+	} else {
+		oauthConfMs.RedirectURL = "http://" + r.Host + "/callback-ms"
+	}
 	HandleLogin(w, r, oauthConfMs, oauthStateStringMs)
 }
 
@@ -87,70 +90,11 @@ func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(token)
 
-		//logger.Log.Info("https://graph.microsoft.com/v1.0/me")
-		//client := &http.Client{}
-		//req, _ := http.NewRequest("GET", "https://graph.microsoft.com/v1.0/me", nil)
-		//req.Header.Set("Authorization", token.AccessToken)
-		//resp, err := client.Do(req)
-		//
-		//if err != nil {
-		//	logger.Log.Error("Get: " + err.Error() + "\n")
-		//	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		//	return
-		//}
-		//
-		//defer resp.Body.Close()
-		//
-		//response, err := ioutil.ReadAll(resp.Body)
-		//if err != nil {
-		//	logger.Log.Error("ReadAll: " + err.Error() + "\n")
-		//	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		//	return
-		//}
-		//
-		//logger.Log.Info("parseResponseBody: " + string(response) + "\n")
-		//
-		//w.Write([]byte("Hello, I'm protected\n"))
-		//w.Write([]byte(string(response)))
-		//return
 	}
 
 }
 
 func ProtectedRoute(w http.ResponseWriter, r *http.Request) {
-	token := extractToken(r)
-	logger.Log.Info("https://graph.microsoft.com/v1.0/me")
-	client := &http.Client{}
-	req, _ := http.NewRequest("GET", "https://graph.microsoft.com/v1.0/me", nil)
-	req.Header.Set("Authorization", token)
-	resp, err := client.Do(req)
-
-	if err != nil {
-		logger.Log.Error("Get: " + err.Error() + "\n")
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	response, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		logger.Log.Error("ReadAll: " + err.Error() + "\n")
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		return
-	}
-
-	logger.Log.Info("parseResponseBody: " + string(response) + "\n")
 
 	w.Write([]byte("Hello, I'm protected\n"))
-	w.Write([]byte(string(response)))
-}
-
-func extractToken(r *http.Request) string {
-	bearToken := r.Header.Get("Authorization")
-	strArr := strings.Split(bearToken, " ")
-	if len(strArr) == 2 {
-		return strArr[1]
-	}
-	return ""
 }

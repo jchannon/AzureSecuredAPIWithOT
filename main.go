@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"github.com/golang-jwt/jwt"
 	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/mendsley/gojwk"
+	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"io/ioutil"
@@ -72,6 +72,7 @@ func middleware(next http.HandlerFunc) http.HandlerFunc {
 
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("Unauthorized"))
 			return
 		}
 
@@ -111,7 +112,7 @@ func VerifyToken(r *http.Request) (*jwt.Token, error) {
 
 	//return idToken, err
 
-	//keySet, err := jwk.Fetch(r.Context(), "https://login.microsoftonline.com/common/discovery/v2.0/keys")
+	keySet, err := jwk.Fetch(r.Context(), "https://login.microsoftonline.com/common/discovery/v2.0/keys")
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if token.Method.Alg() != jwa.RS256.String() {
@@ -122,24 +123,24 @@ func VerifyToken(r *http.Request) (*jwt.Token, error) {
 			return nil, fmt.Errorf("kid header not found")
 		}
 
-		var keys struct{ Keys []gojwk.Key }
-		parseJSONFromURL("https://login.microsoftonline.com/common/discovery/v2.0/keys", &keys)
-		for _, key := range keys.Keys {
-			if key.Kid == kid {
-				return key.DecodePublicKey()
-			}
+		//var keys struct{ Keys []gojwk.Key }
+		//parseJSONFromURL("https://login.microsoftonline.com/common/discovery/v2.0/keys", &keys)
+		//for _, key := range keys.Keys {
+		//	if key.Kid == kid {
+		//		return key.DecodePublicKey()
+		//	}
+		//}
+		//return nil, fmt.Errorf("Key not found")
+		keys, ok := keySet.LookupKeyID(kid)
+		if !ok {
+			return nil, fmt.Errorf("key %v not found", kid)
 		}
-		return nil, fmt.Errorf("Key not found")
-		//keys, ok := keySet.LookupKeyID(kid)
-		//if !ok {
-		//	return nil, fmt.Errorf("key %v not found", kid)
-		//}
-		//var publickey interface{}
-		//err = keys.Raw(&publickey)
-		//if err != nil {
-		//	return nil, fmt.Errorf("could not parse pubkey")
-		//}
-		//
+		var publickey interface{}
+		err = keys.Raw(&publickey)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse pubkey")
+		}
+
 		//rsa1, ok := publickey.(*rsa.PublicKey)
 		//if !ok {
 		//	panic(fmt.Sprintf("expected ras key, got %T", publickey))
@@ -155,7 +156,7 @@ func VerifyToken(r *http.Request) (*jwt.Token, error) {
 		//	return nil, fmt.Errorf("could not parse pubkey")
 		//}
 		//
-		//return key.Decode, nil
+		return publickey, nil
 	})
 
 	if err != nil {
